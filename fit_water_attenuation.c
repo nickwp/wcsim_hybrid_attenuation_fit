@@ -218,8 +218,8 @@ void fit_all(   std::string filename, int nmPMT_on=0, // number of mPMT modules 
 
     // uniformly masking mPMT modules when requested
     int nPMTpermPMT = 19;
-    const int nmPMT_sim = pmt_type1->GetEntries();
-    int mPMT_mask[nmPMT_sim];
+    int nmPMT_sim = pmt_type1->GetEntries();
+    int * mPMT_mask = new int[nmPMT_sim];
     if (nmPMT_on>0){
         double mPMT_frac = (nmPMT_on+0.)/(nmPMT_sim/nPMTpermPMT);
         int mPMT_count = 0;
@@ -278,6 +278,7 @@ void fit_all(   std::string filename, int nmPMT_on=0, // number of mPMT modules 
             hBinnedRate->Fill(-costh,dist,weight);
         }
     }
+    delete[] mPMT_mask;
 
     TCanvas* c1 = new TCanvas();
     hBinnedRate->GetXaxis()->SetTitle("cos(#theta_{PMT})");
@@ -306,7 +307,7 @@ void fit_all(   std::string filename, int nmPMT_on=0, // number of mPMT modules 
 void fit_water_attenuation(){
 
     // TChain is used to load a number of files at the same time
-    std::string filename = "/bundle/data/T2K/users/kmtsui/LI/diffuser32_350nm_x2scattering/absorption_diffuser*.root";
+    std::string filename = "diffuser32_350nm_x2scattering_processed.root";// "~/work/hk-calib/data/nominal/LI/diffuser/400nm/32/out/diffuser32_400nm_nominal_0_processed.root";
     fit_all(filename,0,-952,-940);
     double alpha = truth_alpha(350,1.3,1.5);
 
