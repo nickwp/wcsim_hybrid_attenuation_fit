@@ -114,6 +114,7 @@ double CalcLikelihood(const double* par)
         double costh_pmt = mPMT_costh[i];
         int costh_idx = hBinnedRate_fit1->GetXaxis()->FindBin(costh_pmt);
         if (costh_idx>=1&&costh_idx<=hBinnedRate_fit1->GetNbinsX()) {
+//            cout << costh_idx << endl;
             value*=par[costh_idx];
             hBinnedRate_fit1->Fill(costh_pmt,mPMT_R[i],value);
         }
@@ -140,6 +141,7 @@ double CalcLikelihood(const double* par)
 
     for (int i=1;i<=hBinnedRate_fit0->GetNbinsX();i++) 
         for (int j=1;j<=hBinnedRate_fit0->GetNbinsY();j++) {
+//            if(hBinnedRate0->GetBinContent(i,j) < 0.00001) cout << i << " " << j << endl;
             chi2_stat += PoissonLLH(hBinnedRate_fit0->GetBinContent(i,j), 0, hBinnedRate0->GetBinContent(i,j));
         }
 
@@ -155,7 +157,9 @@ double CalcLikelihood(const double* par)
 
 void run_fit(const char* minName = "Minuit2", const char* algoName="Migrad"){
     int nCosthBins = hBinnedRate1->GetNbinsX();
-    int m_npar = nCosthBins*2+1; // for two PMT types:  number of costh bins * 2 + one alpha parameter
+//    int m_npar = nCosthBins*3+1; // number of costh bins * 2 (for 2 PMT types) + number of costh bins (for non-PMT effects) + one alpha parameter
+    int m_npar = nCosthBins*2+1; // number of costh bins * 2 (for 2 PMT types) + one alpha parameter
+//    int m_npar = nCosthBins+1; // number of costh bins + one alpha parameter
     m_calls = 0;
     ROOT::Math::Minimizer* m_fitter = ROOT::Math::Factory::CreateMinimizer(minName, algoName);
     ROOT::Math::Functor m_fcn(&CalcLikelihood, m_npar);
@@ -171,10 +175,28 @@ void run_fit(const char* minName = "Minuit2", const char* algoName="Migrad"){
 
     m_fitter->SetVariable(0, "alpha", 10000, 100);
     for (int i=1;i<nCosthBins+1;i++){
-        m_fitter->SetVariable(i, Form("norm20_%i",i), hRate1->GetMaximum()/100., hRate1->GetMaximum()/100.);
+        m_fitter->SetVariable(i, Form("norm3_%i",i), hRate1->GetMaximum(), hRate1->GetMaximum()/100.);
     }
     for (int i=1;i<nCosthBins+1;i++){
-        m_fitter->SetVariable(i+nCosthBins, Form("norm3_%i",i), hRate0->GetMaximum()/100., hRate0->GetMaximum()/100.);
+        m_fitter->SetVariable(i+nCosthBins, Form("norm20_%i",i), hRate0->GetMaximum(), hRate0->GetMaximum()/100.);
+    }
+//    for (int i=1;i<nCosthBins+1;i++){
+//        m_fitter->SetVariable(i+2*nCosthBins, Form("normB_%i",i), 1.0, 0.01);
+//    }
+    for (int i=1; i<nCosthBins+1; i++){
+      double rate3 = hBinnedRate1->Integral(i,i,1,hBinnedRate1->GetNbinsY());
+      double rate20 = hBinnedRate0->Integral(i,i,1,hBinnedRate0->GetNbinsY());
+      if(rate3 < 0.00001) {
+        cout << "Fixing param " << i << endl;
+        m_fitter->FixVariable(i);
+      }
+      if(rate20 < 0.00001) {
+        cout << "Fixing param " << i+nCosthBins << endl;
+        m_fitter->FixVariable(i+nCosthBins);
+      }
+//      if(rate20 < 0.00001 && rate3 < 0.00001){
+//        m_fitter->FixVariable(i+2*nCosthBins);
+//      }
     }
     
     bool did_converge = false;
