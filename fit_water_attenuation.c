@@ -84,6 +84,8 @@ TH1D* hRate1; // number of PE per PMT
 TH1D* hRate0; // number of PE per PMT
 TH2D* hBinnedRate1; // number of PE binned in R and costh
 TH2D* hBinnedRate0; // number of PE binned in R and costh
+TH2D* hPMT0;
+TH2D* hPMT1;
 int m_calls;
 std::vector<double> mPMT_R;
 std::vector<double> mPMT_costh;
@@ -100,6 +102,13 @@ double CalcLikelihood(const double* par)
        || (m_calls > 1001 && m_calls % 1000 == 0))
         output_chi2 = true;
 
+    int nCosthBins = hBinnedRate0->GetNbinsX();
+
+    for(int i=1; i<=nCosthBins; i++){
+        if(par[i]<0) return 1e20;
+        if(par[i+nCosthBins]<0) return 1e20;
+    }
+    
     double chi2_stat = 0;
 
     double* data_w  = hRate1->GetArray();
@@ -128,7 +137,6 @@ double CalcLikelihood(const double* par)
     TH2D* hBinnedRate_fit0 = (TH2D*)hBinnedRate0->Clone();
     hBinnedRate_fit0->Reset();
 
-    int nCosthBins = hBinnedRate_fit0->GetNbinsX();
     for (int i=0;i<hRate0->GetNbinsX();i++) {
         double value = TMath::Exp(-PMT_R[i]/par[0])/PMT_R[i]/PMT_R[i]*9000*9000; //an arbitrary normalization
         double costh_pmt = PMT_costh[i];
@@ -136,19 +144,38 @@ double CalcLikelihood(const double* par)
         if (costh_idx>=1&&costh_idx<=nCosthBins) {
             value*=par[costh_idx+nCosthBins];
             hBinnedRate_fit0->Fill(costh_pmt,PMT_R[i],value);
+            if(m_calls ==2){
+                cout << costh_pmt << " " << PMT_R << " " << value << endl;
+            }
         }
     }
 
-    for (int i=1;i<=hBinnedRate_fit0->GetNbinsX();i++) 
-        for (int j=1;j<=hBinnedRate_fit0->GetNbinsY();j++) {
-//            if(hBinnedRate0->GetBinContent(i,j) < 0.00001) cout << i << " " << j << endl;
-            chi2_stat += PoissonLLH(hBinnedRate_fit0->GetBinContent(i,j), 0, hBinnedRate0->GetBinContent(i,j));
+    for (int i=1;i<=hBinnedRate_fit0->GetNbinsX();i++) {
+        for (int j = 1; j <= hBinnedRate_fit0->GetNbinsY(); j++) {
+            double data = hBinnedRate0->GetBinContent(i, j);
+            double mc = hBinnedRate_fit0->GetBinContent(i, j);
+            double llh = PoissonLLH(mc, 0, data);
+            double nPMT = hPMT0->GetBinContent(i,j);
+            double R = hBinnedRate0->GetYaxis()->GetBinCenter(j)/9000.;
+            double mc2 = TMath::Exp(-R*par[0]);
+            if (m_calls == 2 && output_chi2 && data > 0) {
+                std::cout << i << " " << j << " " << nPMT << " " << R*9000. << " " 
+                    << R*R*data/nPMT << " " << R*R*mc/nPMT << " " << mc2 << " " << llh << std::endl;
+            }
+            chi2_stat += llh;
         }
+    }
 
     if(output_chi2)
     {
         std::cout << "Func Calls: " << m_calls << std::endl;
         std::cout << "Chi2 stat : " << chi2_stat << std::endl;
+        std::cout << "alpha: " << par[0] << std::endl;
+        std::cout << "norm_3:";
+        for(int i=1; i<=nCosthBins; i++) std::cout << " " << par[i];
+        std::cout << std::endl << "norm_20:";
+        for(int i=1; i<=nCosthBins; i++) std::cout << " " << par[i+nCosthBins];
+        std::cout << std::endl;
     }
 
     return chi2_stat;
@@ -175,10 +202,10 @@ void run_fit(const char* minName = "Minuit2", const char* algoName="Migrad"){
 
     m_fitter->SetVariable(0, "alpha", 10000, 100);
     for (int i=1;i<nCosthBins+1;i++){
-        m_fitter->SetVariable(i, Form("norm3_%i",i), hRate1->GetMaximum(), hRate1->GetMaximum()/100.);
+        m_fitter->SetVariable(i, Form("norm3_%i",i), 1., 0.1);
     }
     for (int i=1;i<nCosthBins+1;i++){
-        m_fitter->SetVariable(i+nCosthBins, Form("norm20_%i",i), hRate0->GetMaximum(), hRate0->GetMaximum()/100.);
+        m_fitter->SetVariable(i+nCosthBins, Form("norm20_%i",i), 50.0, 1.);
     }
 //    for (int i=1;i<nCosthBins+1;i++){
 //        m_fitter->SetVariable(i+2*nCosthBins, Form("normB_%i",i), 1.0, 0.01);
@@ -201,6 +228,25 @@ void run_fit(const char* minName = "Minuit2", const char* algoName="Migrad"){
     
     bool did_converge = false;
     std::cout <<"Fit prepared." << std::endl;
+//    std::cout <<"Fixing alpha" << std::endl;
+//    m_fitter->FixVariable(0);
+//    std::cout <<"Calling Minimize, running " << minName << ", "<< algoName << std::endl;
+//    did_converge = m_fitter->Minimize();
+//    if(!did_converge)
+//    {
+//        std::cout << "Fit did not converge."<< std::endl;
+//        std::cout << "Failed with status code: " << m_fitter->Status() << std::endl;
+//    }
+//    else
+//    {
+//        std::cout  << "Fit converged." << std::endl
+//                   << "Status code: " << m_fitter->Status() << std::endl;
+//
+//        std::cout << "Calling HESSE." << std::endl;
+//        did_converge = m_fitter->Hesse();
+//    }
+//    std::cout <<"Releasing alpha" << std::endl;
+//    m_fitter->ReleaseVariable(0);
     std::cout <<"Calling Minimize, running " << minName << ", "<< algoName << std::endl;
     did_converge = m_fitter->Minimize();
 
@@ -241,7 +287,7 @@ void run_fit(const char* minName = "Minuit2", const char* algoName="Migrad"){
 
 void fit_all(   std::string filename, int nmPMT_on=0, // number of mPMT modules used fit, 0 = using all
                 double timetof_min = -952, double timetof_max = -945, // hit time window
-                int nbins_costh = 10, double costh_min = 0.5, double costh_max = 1., // binning in costh
+                int nbins_costh = 10, double costh_min = 0.8, double costh_max = 1., // binning in costh
                 int nbins_dist=100, double dist_min = 1000, double dist_max=9000, // binning R
                 double cosths_min = 0.766 // limit due to source opening angle 
             ) 
@@ -259,7 +305,7 @@ void fit_all(   std::string filename, int nmPMT_on=0, // number of mPMT modules 
     double nHits, nPE, dist, costh, cosths, timetof;
     int PMT_id;
 
-    TH2D* hPMT1 = new TH2D("","",nbins_costh,costh_min,costh_max,nbins_dist,dist_min,dist_max);
+    hPMT1 = new TH2D("","",nbins_costh,costh_min,costh_max,nbins_dist,dist_min,dist_max);
     TTree* pmt_type1 = (TTree*)f->Get("pmt_type1");
     pmt_type1->SetBranchAddress("dist",&dist);
     pmt_type1->SetBranchAddress("costh",&costh);
@@ -304,7 +350,7 @@ void fit_all(   std::string filename, int nmPMT_on=0, // number of mPMT modules 
         }
     }
     
-    TH2D* hPMT0 = new TH2D("","",nbins_costh,costh_min,costh_max,nbins_dist,dist_min,dist_max);
+    hPMT0 = new TH2D("","",nbins_costh,costh_min,costh_max,nbins_dist,dist_min,dist_max);
     TTree* pmt_type0 = (TTree*)f->Get("pmt_type0");
     pmt_type0->SetBranchAddress("dist",&dist);
     pmt_type0->SetBranchAddress("costh",&costh);
@@ -372,16 +418,39 @@ void fit_all(   std::string filename, int nmPMT_on=0, // number of mPMT modules 
     hBinnedRate1->GetXaxis()->SetTitle("cos(#theta_{PMT})");
     hBinnedRate1->GetYaxis()->SetTitle("R (cm)");
     hBinnedRate1->Draw("colz");
-    c1->SaveAs(Form("R_theta_BinnedRate_%i.pdf",nmPMT_on));
+    c1->SaveAs(Form("R_theta_BinnedRate_mPMT_%i.pdf",nmPMT_on));
     hPMT1->GetXaxis()->SetTitle("cos(#theta_{PMT})");
     hPMT1->GetYaxis()->SetTitle("R (cm)");
     hPMT1->Draw("colz");
-    c1->SaveAs(Form("PMT_R_theta_map_%i.pdf",nmPMT_on));
-    TH2D* hBinnedRate_ratio = (TH2D*)hBinnedRate1->Clone();
-    hBinnedRate_ratio->Divide(hPMT1);
-    hBinnedRate_ratio->Draw("colz");
-    c1->SaveAs(Form("R_theta_BinnedRate_ratio_%i.pdf",nmPMT_on));
+    c1->SaveAs(Form("PMT_R_theta_map_mPMT_%i.pdf",nmPMT_on));
+    TH2D* hBinnedRate_ratio1 = (TH2D*)hBinnedRate1->Clone();
+    hBinnedRate_ratio1->Divide(hPMT1);
+    hBinnedRate_ratio1->Draw("colz");
+    c1->SaveAs(Form("R_theta_BinnedRate_ratio_mPMT_%i.pdf",nmPMT_on));
 
+    TCanvas* c2 = new TCanvas();
+    hBinnedRate0->GetXaxis()->SetTitle("cos(#theta_{PMT})");
+    hBinnedRate0->GetYaxis()->SetTitle("R (cm)");
+    hBinnedRate0->Draw("colz");
+    c2->SaveAs(Form("R_theta_BinnedRate_BandL_%i.pdf",nmPMT_on));
+    hPMT0->GetXaxis()->SetTitle("cos(#theta_{PMT})");
+    hPMT0->GetYaxis()->SetTitle("R (cm)");
+    hPMT0->Draw("colz");
+    c2->SaveAs(Form("PMT_R_theta_map_BandL_%i.pdf",nmPMT_on));
+    TH2D* hBinnedRate_ratio0 = (TH2D*)hBinnedRate0->Clone();
+    hBinnedRate_ratio0->Divide(hPMT0);
+    hBinnedRate_ratio0->Draw("colz");
+    c2->SaveAs(Form("R_theta_BinnedRate_ratio_BandL_%i.pdf",nmPMT_on));
+    TH2D* hBinnedRate_R2ratio0 = (TH2D*)hBinnedRate_ratio0->Clone();
+    for(int j=1; j<hBinnedRate_R2ratio0->GetNbinsY(); j++){
+        double R2 = pow(hBinnedRate_R2ratio0->GetYaxis()->GetBinCenter(j), 2);
+        for(int i=1; i<hBinnedRate_R2ratio0->GetNbinsX(); i++){
+            hBinnedRate_R2ratio0->SetBinContent(i,j,hBinnedRate_R2ratio0->GetBinContent(i,j)*R2);
+        }
+    }
+    hBinnedRate_R2ratio0->Draw("colz");
+    c2->SaveAs(Form("R_theta_BinnedRate_R2ratio_BandL_%i.pdf",nmPMT_on));
+ 
     int nonzerobins1=0;
     for (int i=1;i<=hBinnedRate1->GetNbinsX();i++)
         for (int j=1;j<=hBinnedRate1->GetNbinsY();j++)
@@ -401,7 +470,7 @@ void fit_all(   std::string filename, int nmPMT_on=0, // number of mPMT modules 
 void fit_water_attenuation(){
 
     // TChain is used to load a number of files at the same time
-    std::string filename = "~/work/hk-calib/data/x2scattering/LI/diffuser/350nm/32/out/diffuser32_350nm_x2scattering_0_processed.root";
+    std::string filename = "~/work/hk-calib/data/x2scattering/LI/diffuser/350nm/4/out/diffuser4_350nm_x2scattering_*_processed.root";
     fit_all(filename,0,-952,-940);
     double alpha = truth_alpha(350,1.3,1.5);
 
