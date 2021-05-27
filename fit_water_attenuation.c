@@ -93,6 +93,9 @@ std::vector<double> PMT_R;
 std::vector<double> PMT_costh;
 std::vector<double> costh_array;
 std::vector<bool> mPMT_use;
+std::vector<bool> PMT_use;
+bool usemPMT;
+bool usePMT;
 double CalcLikelihood(const double* par)
 {
     m_calls++;
@@ -114,58 +117,53 @@ double CalcLikelihood(const double* par)
     double* data_w  = hRate1->GetArray();
     double* data_w2 = hRate1->GetSumw2()->GetArray();
 
-    TH2D* hBinnedRate_fit1 = (TH2D*)hBinnedRate1->Clone();
-    hBinnedRate_fit1->Reset();
+    if(usemPMT) {
+        TH2D *hBinnedRate_fit1 = (TH2D *) hBinnedRate1->Clone();
+        hBinnedRate_fit1->Reset();
 
-    for (int i=0;i<hRate1->GetNbinsX();i++) {
-        if (!mPMT_use[i]) continue;
-        double value = TMath::Exp(-mPMT_R[i]/par[0])/mPMT_R[i]/mPMT_R[i]*9000*9000; //an arbitrary normalization
-        double costh_pmt = mPMT_costh[i];
-        int costh_idx = hBinnedRate_fit1->GetXaxis()->FindBin(costh_pmt);
-        if (costh_idx>=1&&costh_idx<=hBinnedRate_fit1->GetNbinsX()) {
-//            cout << costh_idx << endl;
-            value*=par[costh_idx];
-            hBinnedRate_fit1->Fill(costh_pmt,mPMT_R[i],value);
-        }
-    }
-
-    for (int i=1;i<=hBinnedRate_fit1->GetNbinsX();i++) 
-        for (int j=1;j<=hBinnedRate_fit1->GetNbinsY();j++) {
-            chi2_stat += PoissonLLH(hBinnedRate_fit1->GetBinContent(i,j), 0, hBinnedRate1->GetBinContent(i,j));
+        for (int i = 0; i < hRate1->GetNbinsX(); i++) {
+            if (!mPMT_use[i]) continue;
+            double value =
+                    TMath::Exp(-mPMT_R[i] / par[0]) / mPMT_R[i] / mPMT_R[i] * 9000 * 9000; //an arbitrary normalization
+            double costh_pmt = mPMT_costh[i];
+            int costh_idx = hBinnedRate_fit1->GetXaxis()->FindBin(costh_pmt);
+            if (costh_idx >= 1 && costh_idx <= hBinnedRate_fit1->GetNbinsX()) {
+                value *= par[costh_idx];
+                hBinnedRate_fit1->Fill(costh_pmt, mPMT_R[i], value);
+            }
         }
 
-    TH2D* hBinnedRate_fit0 = (TH2D*)hBinnedRate0->Clone();
-    hBinnedRate_fit0->Reset();
-
-    for (int i=0;i<hRate0->GetNbinsX();i++) {
-        double value = TMath::Exp(-PMT_R[i]/par[0])/PMT_R[i]/PMT_R[i]*9000*9000; //an arbitrary normalization
-        double costh_pmt = PMT_costh[i];
-        int costh_idx = hBinnedRate_fit0->GetXaxis()->FindBin(costh_pmt);
-        if (costh_idx>=1&&costh_idx<=nCosthBins) {
-            value*=par[costh_idx+nCosthBins];
-            hBinnedRate_fit0->Fill(costh_pmt,PMT_R[i],value);
-            if(m_calls ==2){
-                cout << costh_pmt << " " << PMT_R << " " << value << endl;
+        for (int i = 1; i <= hBinnedRate_fit1->GetNbinsX(); i++) {
+            for (int j = 1; j <= hBinnedRate_fit1->GetNbinsY(); j++) {
+                chi2_stat += PoissonLLH(hBinnedRate_fit1->GetBinContent(i, j), 0, hBinnedRate1->GetBinContent(i, j));
             }
         }
     }
+    if(usePMT) {
+        TH2D *hBinnedRate_fit0 = (TH2D *) hBinnedRate0->Clone();
+        hBinnedRate_fit0->Reset();
 
-    for (int i=1;i<=hBinnedRate_fit0->GetNbinsX();i++) {
-        for (int j = 1; j <= hBinnedRate_fit0->GetNbinsY(); j++) {
-            double data = hBinnedRate0->GetBinContent(i, j);
-            double mc = hBinnedRate_fit0->GetBinContent(i, j);
-            double llh = PoissonLLH(mc, 0, data);
-            double nPMT = hPMT0->GetBinContent(i,j);
-            double R = hBinnedRate0->GetYaxis()->GetBinCenter(j)/9000.;
-            double mc2 = TMath::Exp(-R*par[0]);
-            if (m_calls == 2 && output_chi2 && data > 0) {
-                std::cout << i << " " << j << " " << nPMT << " " << R*9000. << " " 
-                    << R*R*data/nPMT << " " << R*R*mc/nPMT << " " << mc2 << " " << llh << std::endl;
+        for (int i = 0; i < hRate0->GetNbinsX(); i++) {
+            if (!PMT_use[i]) continue;
+            double value =
+                    TMath::Exp(-PMT_R[i] / par[0]) / PMT_R[i] / PMT_R[i] * 9000 * 9000; //an arbitrary normalization
+            double costh_pmt = PMT_costh[i];
+            int costh_idx = hBinnedRate_fit0->GetXaxis()->FindBin(costh_pmt);
+            if (costh_idx >= 1 && costh_idx <= nCosthBins) {
+                value *= par[costh_idx + nCosthBins];
+                hBinnedRate_fit0->Fill(costh_pmt, PMT_R[i], value);
             }
-            chi2_stat += llh;
+        }
+
+        for (int i = 1; i <= hBinnedRate_fit0->GetNbinsX(); i++) {
+            for (int j = 1; j <= hBinnedRate_fit0->GetNbinsY(); j++) {
+                double data = hBinnedRate0->GetBinContent(i, j);
+                double mc = hBinnedRate_fit0->GetBinContent(i, j);
+                double llh = PoissonLLH(mc, 0, data);
+                chi2_stat += llh;
+            }
         }
     }
-
     if(output_chi2)
     {
         std::cout << "Func Calls: " << m_calls << std::endl;
@@ -213,11 +211,11 @@ void run_fit(const char* minName = "Minuit2", const char* algoName="Migrad"){
     for (int i=1; i<nCosthBins+1; i++){
       double rate3 = hBinnedRate1->Integral(i,i,1,hBinnedRate1->GetNbinsY());
       double rate20 = hBinnedRate0->Integral(i,i,1,hBinnedRate0->GetNbinsY());
-      if(rate3 < 0.00001) {
+      if(!usemPMT || rate3 < 0.00001) {
         cout << "Fixing param " << i << endl;
         m_fitter->FixVariable(i);
       }
-      if(rate20 < 0.00001) {
+      if(!usePMT || rate20 < 0.00001) {
         cout << "Fixing param " << i+nCosthBins << endl;
         m_fitter->FixVariable(i+nCosthBins);
       }
@@ -286,12 +284,15 @@ void run_fit(const char* minName = "Minuit2", const char* algoName="Migrad"){
 
 
 void fit_all(   std::string filename, int nmPMT_on=0, // number of mPMT modules used fit, 0 = using all
+                bool mPMT = true, bool PMT = true,
                 double timetof_min = -952, double timetof_max = -945, // hit time window
                 int nbins_costh = 10, double costh_min = 0.8, double costh_max = 1., // binning in costh
                 int nbins_dist=100, double dist_min = 1000, double dist_max=9000, // binning R
-                double cosths_min = 0.766 // limit due to source opening angle 
+                double cosths_min = 0.766 // limit due to source opening angle
             ) 
 {
+    usemPMT = mPMT;
+    usePMT = PMT;
     gROOT->Reset();
     gStyle->SetOptFit(1111);
     gStyle->SetOptStat(0);
@@ -356,14 +357,18 @@ void fit_all(   std::string filename, int nmPMT_on=0, // number of mPMT modules 
     pmt_type0->SetBranchAddress("costh",&costh);
     pmt_type0->SetBranchAddress("cosths",&cosths);
     pmt_type0->SetBranchAddress("PMT_id",&PMT_id);
-    PMT_R.clear();PMT_costh.clear();
+    int nPMT_used=0;
+    PMT_use.clear();PMT_R.clear();PMT_costh.clear();
+    PMT_use.resize(nmPMT_sim,false);
     for (int i=0;i<pmt_type0->GetEntries();i++) {
         pmt_type0->GetEntry(i);
         PMT_R.push_back(dist);
         PMT_costh.push_back(-costh);
         if (cosths>cosths_min) // only include PMT within the source opening angle 
         {
-            hPMT0->Fill(-costh,dist); 
+            hPMT0->Fill(-costh,dist);
+            PMT_use[i]=true;
+            nPMT_used++;
         }
     }
     
@@ -463,6 +468,7 @@ void fit_all(   std::string filename, int nmPMT_on=0, // number of mPMT modules 
     run_fit();
     std::cout<<"Number of mPMT_used = "<<nmPMT_used<<std::endl;
     std::cout<<"Number of non-zero mPMT bins = "<<nonzerobins1<<std::endl;
+    std::cout<<"Number of PMT_used = "<<nPMT_used<<std::endl;
     std::cout<<"Number of non-zero PMT bins = "<<nonzerobins0<<std::endl;
 
 }
@@ -471,7 +477,7 @@ void fit_water_attenuation(){
 
     // TChain is used to load a number of files at the same time
     std::string filename = "~/work/hk-calib/data/x2scattering/LI/diffuser/350nm/4/out/diffuser4_350nm_x2scattering_*_processed.root";
-    fit_all(filename,0,-952,-940);
+    fit_all(filename,0,false,true,-952,-940);
     double alpha = truth_alpha(350,1.3,1.5);
 
 }
