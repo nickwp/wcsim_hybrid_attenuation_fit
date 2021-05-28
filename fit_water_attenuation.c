@@ -128,16 +128,10 @@ double CalcLikelihood(const double* par)
             int costh_idx = hBinnedRate_fit1->GetXaxis()->FindBin(costh_pmt);
             if (costh_idx >= 1 && costh_idx <= hBinnedRate_fit1->GetNbinsX()) {
                 value *= par[costh_idx];
-                hBinnedRate_fit1->Fill(costh_pmt, mPMT_R[i], value);
-//                chi2_stat += PoissonLLH(value, 0, hRate1->GetBinContent(i+1));
+                chi2_stat += PoissonLLH(value, 0, hRate1->GetBinContent(i+1));
             }
         }
 
-        for (int i = 1; i <= hBinnedRate_fit1->GetNbinsX(); i++) {
-            for (int j = 1; j <= hBinnedRate_fit1->GetNbinsY(); j++) {
-                chi2_stat += PoissonLLH(hBinnedRate_fit1->GetBinContent(i, j), 0, hBinnedRate1->GetBinContent(i, j));
-            }
-        }
     }
     if(usePMT) {
         TH2D *hBinnedRate_fit0 = (TH2D *) hBinnedRate0->Clone();
@@ -151,20 +145,10 @@ double CalcLikelihood(const double* par)
             int costh_idx = hBinnedRate_fit0->GetXaxis()->FindBin(costh_pmt);
             if (costh_idx >= 1 && costh_idx <= nCosthBins) {
                 value *= par[costh_idx + nCosthBins];
-                hBinnedRate_fit0->Fill(costh_pmt, PMT_R[i], value);
-//                double llh = PoissonLLH(value, 0, hRate0->GetBinContent(i+1));
-//                chi2_stat += llh;
+                chi2_stat += PoissonLLH(value, 0, hRate0->GetBinContent(i+1));
             }
         }
 
-        for (int i = 1; i <= hBinnedRate_fit0->GetNbinsX(); i++) {
-            for (int j = 1; j <= hBinnedRate_fit0->GetNbinsY(); j++) {
-                double data = hBinnedRate0->GetBinContent(i, j);
-                double mc = hBinnedRate_fit0->GetBinContent(i, j);
-                double llh = PoissonLLH(mc, 0, data);
-                chi2_stat += llh;
-            }
-        }
     }
     if(output_chi2)
     {
@@ -200,12 +184,12 @@ void run_fit(const char* minName = "Minuit2", const char* algoName="Migrad"){
     m_fitter->SetMaxIterations(1.e6);
     m_fitter->SetMaxFunctionCalls(1.e9);
 
-    m_fitter->SetVariable(0, "alpha", 11000, 100);
+    m_fitter->SetVariable(0, "alpha", 11000, 10);
     for (int i=1;i<nCosthBins+1;i++){
-        m_fitter->SetVariable(i, Form("norm3_%i",i), 1., 0.1);
+        m_fitter->SetVariable(i, Form("norm3_%i",i), 100., 1.0);
     }
     for (int i=1;i<nCosthBins+1;i++){
-        m_fitter->SetVariable(i+nCosthBins, Form("norm20_%i",i), 50.0, 1.);
+        m_fitter->SetVariable(i+nCosthBins, Form("norm20_%i",i), 5000.0, 50.);
     }
 //    for (int i=1;i<nCosthBins+1;i++){
 //        m_fitter->SetVariable(i+2*nCosthBins, Form("normB_%i",i), 1.0, 0.01);
