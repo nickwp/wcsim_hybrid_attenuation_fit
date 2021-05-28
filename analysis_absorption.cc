@@ -141,7 +141,7 @@ int main(int argc, char **argv){
   TFile * outfile = new TFile(outfilename,"RECREATE");
   cout<<"File "<<outfilename<<" is open for writing"<<endl;
 
-  double nHits, nPE, dist, costh, timetof, cosths;
+  double nHits, nPE, dist, costh, costh_mPMT, timetof, cosths, time;
   int PMT_id, mPMT_PMTNo; //mPMT_id
   // TTree for storing the hit information. One for B&L PMT<, one for mPMT
   TTree* hitRate_pmtType0 = new TTree("hitRate_pmtType0","hitRate_pmtType0");
@@ -151,14 +151,17 @@ int main(int argc, char **argv){
   hitRate_pmtType0->Branch("costh",&costh); // photon incident angle relative to PMT
   hitRate_pmtType0->Branch("cosths",&cosths); // PMT angle relative to source
   hitRate_pmtType0->Branch("timetof",&timetof); // hittime-tof
+  hitRate_pmtType0->Branch("time",&time); // hittime
   hitRate_pmtType0->Branch("PMT_id",&PMT_id);
   TTree* hitRate_pmtType1 = new TTree("hitRate_pmtType1","hitRate_pmtType1");
   hitRate_pmtType1->Branch("nHits",&nHits);
   hitRate_pmtType1->Branch("nPE",&nPE);
   hitRate_pmtType1->Branch("dist",&dist);
   hitRate_pmtType1->Branch("costh",&costh);
+  hitRate_pmtType1->Branch("costh_mPMT",&costh_mPMT);
   hitRate_pmtType1->Branch("cosths",&cosths);
   hitRate_pmtType1->Branch("timetof",&timetof);
+  hitRate_pmtType1->Branch("time",&time);
   hitRate_pmtType1->Branch("PMT_id",&PMT_id);
   hitRate_pmtType1->Branch("mPMT_PMTNo",&mPMT_PMTNo); //sub-ID of PMT inside a mPMT module
 
@@ -347,7 +350,7 @@ int main(int argc, char **argv){
         
         WCSimRootCherenkovHitTime * HitTime = (WCSimRootCherenkovHitTime*) timeArray->At(i);//Takes the first hit of the array as the timing, It should be the earliest hit
         //WCSimRootCherenkovHitTime HitTime = (WCSimRootCherenkovHitTime) timeArray->At(j);		  
-        double time = HitTime->GetTruetime();
+        time = HitTime->GetTruetime();
         ////////////////////////////////////////////////////////////////////////////
         ////////////////////////////////////////////////////////////////////////////
         ////////////////////////////////////////////////////////////////////////////
@@ -444,7 +447,7 @@ int main(int argc, char **argv){
           vOrientation[j] /= NormOrientation;
         }
 
-        double time = wcsimrootcherenkovdigihit->GetT();
+        time = wcsimrootcherenkovdigihit->GetT();
       
         ////////////////////////////////////////////////////////////////////////////
         ////////////////////////////////////////////////////////////////////////////
@@ -457,7 +460,29 @@ int main(int argc, char **argv){
         nHits = 1; nPE = peForTube; dist = Norm; costh = vDir[0]*vOrientation[0]+vDir[1]*vOrientation[1]+vDir[2]*vOrientation[2];
         cosths = vDir[0]*vDirSource[0]+vDir[1]*vDirSource[1]+vDir[2]*vDirSource[2];
         if (pmtType==0) hitRate_pmtType0->Fill();
-        if (pmtType==1) hitRate_pmtType1->Fill();
+        if (pmtType==1){
+            if(mPMT_PMTNo == 19) costh_mPMT = costh;
+            else{
+                pmt = geo->GetPMT(i-i%19+18,true);
+                for(int j=0;j<3;j++){
+                    PMTpos[j] = pmt.GetPosition(j);
+                    PMTdir[j] = pmt.GetOrientation(j);
+                }
+                for(int j=0;j<3;j++) particleRelativePMTpos[j] = PMTpos[j] - vtxpos[j];
+                for(int j=0;j<3;j++){
+                    vDir[j] = particleRelativePMTpos[j];
+                    vOrientation[j] = PMTdir[j];
+                }
+                Norm = TMath::Sqrt(vDir[0]*vDir[0]+vDir[1]*vDir[1]+vDir[2]*vDir[2]);
+                NormOrientation = TMath::Sqrt(vOrientation[0]*vOrientation[0]+vOrientation[1]*vOrientation[1]+vOrientation[2]*vOrientation[2]);
+                for(int j=0;j<3;j++){
+                    vDir[j] /= Norm;
+                    vOrientation[j] /= NormOrientation;
+                }
+                costh_mPMT = vDir[0]*vOrientation[0]+vDir[1]*vOrientation[1]+vDir[2]*vOrientation[2];
+            }
+            hitRate_pmtType1->Fill();
+        }
 
 
       } // End of loop over Cherenkov hits
@@ -482,6 +507,7 @@ int main(int argc, char **argv){
   TTree* pmt_type1 = new TTree("pmt_type1","pmt_type1");
   pmt_type1->Branch("dist",&dist);
   pmt_type1->Branch("costh",&costh);
+  pmt_type1->Branch("costh_mPMT",&costh_mPMT);
   pmt_type1->Branch("cosths",&cosths);
   pmt_type1->Branch("PMT_id",&PMT_id);
   pmt_type1->Branch("mPMT_PMTNo",&mPMT_PMTNo);
@@ -537,7 +563,29 @@ int main(int argc, char **argv){
       costh = vDir[0]*vOrientation[0]+vDir[1]*vOrientation[1]+vDir[2]*vOrientation[2];
       cosths = vDir[0]*vDirSource[0]+vDir[1]*vDirSource[1]+vDir[2]*vDirSource[2];
       if (pmtType==0) pmt_type0->Fill();
-      if (pmtType==1) pmt_type1->Fill();
+      if (pmtType==1) {
+          if(mPMT_PMTNo == 19) costh_mPMT = costh;
+          else{
+              pmt = geo->GetPMT(i-i%19+18,true);
+              for(int j=0;j<3;j++){
+                  PMTpos[j] = pmt.GetPosition(j);
+                  PMTdir[j] = pmt.GetOrientation(j);
+              }
+              for(int j=0;j<3;j++) particleRelativePMTpos[j] = PMTpos[j] - vtxpos[j];
+              for(int j=0;j<3;j++){
+                  vDir[j] = particleRelativePMTpos[j];
+                  vOrientation[j] = PMTdir[j];
+              }
+              Norm = TMath::Sqrt(vDir[0]*vDir[0]+vDir[1]*vDir[1]+vDir[2]*vDir[2]);
+              NormOrientation = TMath::Sqrt(vOrientation[0]*vOrientation[0]+vOrientation[1]*vOrientation[1]+vOrientation[2]*vOrientation[2]);
+              for(int j=0;j<3;j++){
+                  vDir[j] /= Norm;
+                  vOrientation[j] /= NormOrientation;
+              }
+              costh_mPMT = vDir[0]*vOrientation[0]+vDir[1]*vOrientation[1]+vDir[2]*vOrientation[2];
+          }
+          pmt_type1->Fill();
+      }
     }
   }
   pmt_type0->Write();
