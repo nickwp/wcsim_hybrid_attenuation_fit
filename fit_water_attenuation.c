@@ -123,13 +123,13 @@ double CalcLikelihood(const double* par)
 
         for (int i = 0; i < hRate1->GetNbinsX(); i++) {
             if (!mPMT_use[i]) continue;
-            double value =
-                    TMath::Exp(-mPMT_R[i] / par[0]) / mPMT_R[i] / mPMT_R[i] * 9000 * 9000; //an arbitrary normalization
+            double value = TMath::Exp(-mPMT_R[i] / par[0]) / mPMT_R[i] / mPMT_R[i] * 9000 * 9000; //an arbitrary normalization
             double costh_pmt = mPMT_costh[i];
             int costh_idx = hBinnedRate_fit1->GetXaxis()->FindBin(costh_pmt);
             if (costh_idx >= 1 && costh_idx <= hBinnedRate_fit1->GetNbinsX()) {
                 value *= par[costh_idx];
                 hBinnedRate_fit1->Fill(costh_pmt, mPMT_R[i], value);
+//                chi2_stat += PoissonLLH(value, 0, hRate1->GetBinContent(i+1));
             }
         }
 
@@ -152,6 +152,8 @@ double CalcLikelihood(const double* par)
             if (costh_idx >= 1 && costh_idx <= nCosthBins) {
                 value *= par[costh_idx + nCosthBins];
                 hBinnedRate_fit0->Fill(costh_pmt, PMT_R[i], value);
+//                double llh = PoissonLLH(value, 0, hRate0->GetBinContent(i+1));
+//                chi2_stat += llh;
             }
         }
 
@@ -198,7 +200,7 @@ void run_fit(const char* minName = "Minuit2", const char* algoName="Migrad"){
     m_fitter->SetMaxIterations(1.e6);
     m_fitter->SetMaxFunctionCalls(1.e9);
 
-    m_fitter->SetVariable(0, "alpha", 10000, 100);
+    m_fitter->SetVariable(0, "alpha", 11000, 100);
     for (int i=1;i<nCosthBins+1;i++){
         m_fitter->SetVariable(i, Form("norm3_%i",i), 1., 0.1);
     }
@@ -286,7 +288,7 @@ void run_fit(const char* minName = "Minuit2", const char* algoName="Migrad"){
 void fit_all(   std::string filename, int nmPMT_on=0, // number of mPMT modules used fit, 0 = using all
                 bool mPMT = true, bool PMT = true,
                 double timetof_min = -952, double timetof_max = -945, // hit time window
-                int nbins_costh = 10, double costh_min = 0.8, double costh_max = 1., // binning in costh
+                int nbins_costh = 50, double costh_min = 0.5, double costh_max = 1., // binning in costh
                 int nbins_dist=100, double dist_min = 1000, double dist_max=9000, // binning R
                 double cosths_min = 0.766 // limit due to source opening angle
             ) 
@@ -357,11 +359,14 @@ void fit_all(   std::string filename, int nmPMT_on=0, // number of mPMT modules 
     pmt_type0->SetBranchAddress("costh",&costh);
     pmt_type0->SetBranchAddress("cosths",&cosths);
     pmt_type0->SetBranchAddress("PMT_id",&PMT_id);
+    int nPMT_sim = pmt_type1->GetEntries();
+    int min_PMTid = 99999999;
     int nPMT_used=0;
     PMT_use.clear();PMT_R.clear();PMT_costh.clear();
     PMT_use.resize(nmPMT_sim,false);
     for (int i=0;i<pmt_type0->GetEntries();i++) {
         pmt_type0->GetEntry(i);
+        if(PMT_id < min_PMTid) min_PMTid = PMT_id;
         PMT_R.push_back(dist);
         PMT_costh.push_back(-costh);
         if (cosths>cosths_min) // only include PMT within the source opening angle 
@@ -406,15 +411,15 @@ void fit_all(   std::string filename, int nmPMT_on=0, // number of mPMT modules 
     hitRate_pmtType0->SetBranchAddress("nHits",&nHits);
     hitRate_pmtType0->SetBranchAddress("nPE",&nPE);
     hitRate_pmtType0->SetBranchAddress("timetof",&timetof);
-    pmt_type0->SetBranchAddress("PMT_id",&PMT_id);
-    hRate0 = new TH1D("","",nmPMT_sim,0,nmPMT_sim);
+    hitRate_pmtType0->SetBranchAddress("PMT_id",&PMT_id);
+    hRate0 = new TH1D("","",nPMT_sim,0,nPMT_sim);
     hBinnedRate0 = new TH2D("","",nbins_costh,costh_min,costh_max,nbins_dist,dist_min,dist_max);
     for (ULong64_t i=0;i<hitRate_pmtType0->GetEntries();i++) {
         hitRate_pmtType0->GetEntry(i);
         if (cosths>cosths_min&&timetof>timetof_min&&timetof<timetof_max) // only hits within the decided time window and the source opening angle  
         {
             double weight = nPE;
-            hRate0->Fill(PMT_id+0.5,weight);
+            hRate0->Fill(PMT_id-min_PMTid+0.5,weight);
             hBinnedRate0->Fill(-costh,dist,weight);
         }
     }
@@ -477,7 +482,9 @@ void fit_water_attenuation(){
 
     // TChain is used to load a number of files at the same time
     std::string filename = "~/work/hk-calib/data/x2scattering/LI/diffuser/350nm/4/out/diffuser4_350nm_x2scattering_*_processed.root";
-    fit_all(filename,0,false,true,-952,-940);
+    bool pmt = true;
+    bool mpmt = true;
+    fit_all(filename,0,mpmt,pmt,-952,-940);
     double alpha = truth_alpha(350,1.3,1.5);
 
 }
