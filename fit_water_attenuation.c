@@ -1,3 +1,18 @@
+#include "TH2D.h"
+#include "TH2D.h"
+#include "TGraph.h"
+#include "TROOT.h"
+#include "TMath.h"
+#include "TFile.h"
+#include "TTree.h"
+#include "TChain.h"
+#include "TCanvas.h"
+#include "TStyle.h"
+#include "Math/Minimizer.h"
+#include "Math/Factory.h"
+#include "Math/Functor.h"
+#include <iostream>
+
 double truth_alpha(double wavelength, double ABWFF=1.30, double RAYFF=0.75) {
     const int NUMENTRIES_water=60;
     const double GeV=1.e9;
@@ -493,10 +508,10 @@ void fit_all(   std::string filename, int nmPMT_on=0, // number of mPMT modules 
 void fit_water_attenuation(){
 
     // TChain is used to load a number of files at the same time
-    std::string filename = "~/work/hk-calib/data/x2scattering/LI/diffuser/350nm/4/out/diffuser*_processed.root";
+    std::string filename = "~/work/hk-calib/data/nominal/LI/diffuser/350nm/4/out/diffuser*_processed.root";
     bool pmt = true;
     bool mpmt = true;
     fit_all(filename,0,mpmt,pmt,-952,-940);
-    double alpha = truth_alpha(350,1.3,1.5);
+    double alpha = truth_alpha(350,1.3,1.5/2);
 
 }
